@@ -4,7 +4,7 @@ var currentResults = {};
 var recentList 
 var playerTimer
 var player = {
-    volume: 0,
+    volume: 0.5,
     currentPlaying: null,
     position: 0,
     duration:0,
@@ -13,7 +13,7 @@ var player = {
 
 $(function () {
 
-    var socket = io();
+    var socket = io('http://api.zaqify.com:8080/');
 
     var searchBox = document.getElementById('query')
     var searchTimeout = null;
@@ -96,6 +96,9 @@ $(function () {
         socket.emit('preview', req);
     });
     socket.on('test',function(data){
+        console.dir(data);
+    });
+    socket.on('err',function(data){
         console.dir(data);
     });
     socket.on('updateQueue', function(queue){
