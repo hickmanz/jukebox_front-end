@@ -308,6 +308,7 @@ $(function () {
 
 function configUserSettings(){
     //playlist image size settings
+    document.getElementById("#playlist-view-options").value = playlistImgSetting;
     if(playlistImgSetting == "bigImages"){
         $(".playlist-holder").removeClass("smallImages");
         $(".playlist-holder").removeClass("noImages");
