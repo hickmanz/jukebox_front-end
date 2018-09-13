@@ -13,7 +13,7 @@ var player = {
 
 $(function () {
 
-    var socket = io();
+    var socket = io('http://api.zaqify.com:8080/');
 
     var searchBox = document.getElementById('query')
     var searchTimeout = null;
