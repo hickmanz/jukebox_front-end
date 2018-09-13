@@ -1,4 +1,5 @@
 var playlistShown = true;
+var optionsShown = false;
 var windowState
 var currentResults = {};
 var recentList 
@@ -17,7 +18,18 @@ $(function () {
 
     var searchBox = document.getElementById('query')
     var searchTimeout = null;
-    
+
+    var playlistImgSetting
+
+    if (window.localStorage.getItem('playlistimg') === null) {
+        window.localStorage.setItem('playlistimg', 'big')
+        playlistImgSetting = "big"
+    } else {
+        playlistImgSetting = window.localStorage.getItem('playlistimg')
+    }
+
+    configUserSettings()
+
     //init visual
     $(".artist-holder-row").hide();
     $("#search-outter").hide();
@@ -254,6 +266,9 @@ $(function () {
             showSearch()
         }
     });
+    $('.options-label').click(function () { // When arrow is clicked
+        toggleOptions()
+    });
     $('#recent').click(function () { // When arrow is clicked
         socket.emit('get-recently-played')
         if (playlistShown == true){
@@ -291,6 +306,24 @@ $(function () {
     });
     $( "#sortable" ).disableSelection();
 
+function configUserSettings(){
+    //playlist image size settings
+    if(playlistImgSetting == "bigImages"){
+        $(".playlist-holder").removeClass("smallImages");
+        $(".playlist-holder").removeClass("noImages");
+    } else if(playlistImgSetting == "smallImages"){
+        $(".playlist-holder").addClass("smallImages");
+        $(".playlist-holder").removeClass("noImages");
+    }else if (playlistImgSetting == "noImages"){
+        $(".playlist-holder").removeClass("smallImages");
+        $(".playlist-holder").addClass("noImages");
+    }
+}
+$("#playlist-view-options").on('change', function() {
+    window.localStorage.setItem('playlistimg', $(this).val())
+    playlistImgSetting = $(this).val()
+    configUserSettings()
+});
 
 function updatePlayer(){
     if(player.currentPlaying == null){
@@ -360,6 +393,15 @@ function showSearch() {
     $(".current-song-holder").addClass("collapse");
     searchBox.focus()
     playlistShown = false;
+}
+function toggleOptions() {
+    if(optionsShown){
+        $(".options-cover").removeClass("expanded");
+        optionsShown = false;
+    } else {
+        $(".options-cover").addClass("expanded");
+        optionsShown = true;
+    }
 }
 function showRecent() {
     windowState = "recent"
