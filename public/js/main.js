@@ -4,7 +4,7 @@ var currentResults = {};
 var recentList 
 var playerTimer
 var player = {
-    volume: 0.5,
+    volume: .5,
     currentPlaying: null,
     position: 0,
     duration:0,
@@ -13,7 +13,7 @@ var player = {
 
 $(function () {
 
-    var socket = io('http://api.zaqify.com:8080/');
+    var socket = io();
 
     var searchBox = document.getElementById('query')
     var searchTimeout = null;
@@ -95,10 +95,19 @@ $(function () {
         req.data = this.getAttribute('data-trackid');
         socket.emit('preview', req);
     });
-    socket.on('test',function(data){
-        console.dir(data);
+    $('.queue').on('click', 'div.remove', function(e) {
+        var req = {};
+        req.type = "removeSong";
+        req.data = $(this).parent().data('guid');
+        console.log(req.data)
+        socket.emit('editQueue', req);
     });
-    socket.on('err',function(data){
+    $('#nuke-it').on('click',  function(e) {
+        var req = {};
+        req.type = "NukeIt";
+        socket.emit('editQueue', req);
+    });
+    socket.on('test',function(data){
         console.dir(data);
     });
     socket.on('updateQueue', function(queue){
@@ -108,6 +117,7 @@ $(function () {
             var li = $("<li />");
             li.html(getPlaylistDiv(queue[i]));
             li.attr("data-trackid", queue[i].id);
+            li.attr("data-guid", queue[i].guid);
             $(".queue").append(li);
         }
     });
@@ -437,8 +447,12 @@ function getPlaylistDiv(data){
                             ` + artists + `
                         </div>
                     </div>
+                </div>
+                <div class="remove">
+                <i>X</i>
                 </div>`;
 }
+
 
 function ToastBuilder(options) {
     // options are optional
