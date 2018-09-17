@@ -4,6 +4,7 @@ var windowState
 var currentResults = {};
 var recentList 
 var playerTimer
+var tokenData;
 var player = {
     volume: .5,
     currentPlaying: null,
@@ -15,6 +16,7 @@ var player = {
 $(function () {
 
     var socket = io('http://api.zaqify.com:8080/');
+    //var socket = io('http://localhost:8080/');
 
     var searchBox = document.getElementById('query')
     var searchTimeout = null;
@@ -74,7 +76,6 @@ $(function () {
             socket.emit('search', searchBox.value);
         }, 800);
     };
-
     $('form').submit(function(){
       socket.emit('search', searchBox.val());
       searchBox.blur();
@@ -113,6 +114,7 @@ $(function () {
         req.data = $(this).parent().data('guid');
         console.log(req.data)
         socket.emit('editQueue', req);
+        showtoast('Song Removed')
     });
     $('#nuke-it').on('click',  function(e) {
         var req = {};
@@ -282,6 +284,21 @@ $(function () {
     $('.current-song-content').click(function () { // When arrow is clicked
         if(playlistShown == false){
             showPlaylist();
+        } else {
+            //if not control-status class
+            showSearch()
+        }
+    }).find('.control-status').click(function(e) {
+        if(playlistShown == false){
+            showPlaylist();
+        } else {
+            e.stopPropagation();
+        }
+    });
+ 
+    $('.logo-holder').click(function () { // When arrow is clicked
+        if(playlistShown == false){
+            showPlaylist();
         }
     });
     $( "#sortable" ).sortable({
@@ -308,7 +325,7 @@ $(function () {
 
 function configUserSettings(){
     //playlist image size settings
-    document.getElementById("#playlist-view-options").value = playlistImgSetting;
+    $("#playlist-view-options").val(playlistImgSetting);
     if(playlistImgSetting == "bigImages"){
         $(".playlist-holder").removeClass("smallImages");
         $(".playlist-holder").removeClass("noImages");

@@ -77,7 +77,7 @@ $(function () {
         }, 800);
     };
 
-    function searchSpotify(query){
+    function searchSpotify(data){
         console.log('search term: ' + data);
 
         checkToken().then(function(resp){
