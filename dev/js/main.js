@@ -65,6 +65,21 @@ $(function () {
         $(".icon-pause").show();
         $(".icon-play").hide();
     })
+    $(".shuffle-playlist").click(function(){
+        console.log('sending shuffle command')
+        showtoast('Shuffling Playlist!')
+        socket.emit('shuffle-playlist')
+    })
+    $(".restart-player").click(function(){
+        showtoast('Restarting player :(')
+        socket.emit('restart-player')
+    })
+    $(".nuke-playlist").click(function(){
+        showtoast('NUKING IT')
+        var req = {};
+        req.type = "nukeIt";
+        socket.emit('editQueue', req);
+    })
     searchBox.onkeyup = function (e) {
         // Clear the timeout if it has already been set.
         // This will prevent the previous task from executing
@@ -176,11 +191,6 @@ $(function () {
         console.log(req.data)
         socket.emit('editQueue', req);
         showtoast('Song Removed')
-    });
-    $('#nuke-it').on('click',  function(e) {
-        var req = {};
-        req.type = "NukeIt";
-        socket.emit('editQueue', req);
     });
     socket.on('test',function(data){
         console.dir(data);

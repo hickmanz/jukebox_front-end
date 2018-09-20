@@ -177,7 +177,34 @@ html{
     min-height: 200px;
     padding: 20px;
 }
+.options li{
+    display: flex;
+    padding-bottom: 20px;
+}
+.options .button{
+    border: solid #aaaaaa 1px;
+    padding: 7px;
+    font-size: 13px;
+    color: #424142;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+.options .button:hover{
+    border: solid #c84b4c 2px;
+    padding: 7px;
+    font-size: 13px;
+    background: #c84b4c;
+    color: white;
+    font-weight: 500;
+    text-transform: uppercase;
+}
 .options select{
+    border: solid #aaaaaa 1px;
+    padding: 7px;
+    font-size: 13px;
+    color: #424142;
+    font-weight: 500;
+    text-transform: uppercase;
     font-family: inherit;
 }
 .options-label{
@@ -231,7 +258,7 @@ html{
 .current-song-background{
     width: 110%;
     height: 110%;
-    background-image: url('https://i.scdn.co/image/ae66cbcb48eb496ef4bf6bc38b604e850d2ed68d');
+    background-image: url('../images/robot.png');
     background-size: 110%;
     background-position: center;
     filter: blur(8px);
