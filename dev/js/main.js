@@ -13,6 +13,8 @@ var player = {
     playback: null
 }
 
+var spotifyApi = new SpotifyWebApi();
+
 $(function () {
 
     var socket = io('http://api.zaqify.com:8080/');
@@ -91,26 +93,30 @@ $(function () {
             searchSpotify(searchBox.value) //socket.emit('search', searchBox.value);
         }, 800);
     };
-
+    //on expired token send to server and wait for update
+    //set token when you get it
     function searchSpotify(data){
         console.log('search term: ' + data);
 
         checkToken().then(function(resp){
             spotifyApi.searchArtists(data)
                 .then(function(response) {
-                    socket.emit('artistSrchResp', response);
+                    //print it
+                    console.dir(response)
+                    artistSrchResp(response);
                 }, function(err) {
                     console.error(err);
                 });
             spotifyApi.searchAlbums(data)
                 .then(function(response2) {
-                    socket.emit('albumSrchResp', response2);
+                    //print it
+                    albumSrchResp(response2);
                 }, function(err) {
                     console.error(err);
                 });
-            spotifyApi.searchTracks(data, {limit: 10})
+            spotifyApi.searchTracks(data, {limit: 50})
                 .then(function(response3) {
-                    socket.emit('trackSrchResp', response3);
+                    trackSrchResp(response3)
                 }, function(err) {
                     console.error(err);
                 });  
@@ -120,36 +126,28 @@ $(function () {
     function checkToken(){
         return new Promise(function (fulfill, reject){
             var timeToExp = Math.floor(tokenData.spotifyTokenExpirationEpoch - new Date().getTime() / 1000)
-            console.log(timeToExp)
+            console.log("Token expires in:", timeToExp)
             if ( timeToExp < 500){
-                spotifyApi.refreshAccessToken().then(function(data) {
-                    tokenData.spotifyTokenExpirationEpoch = (new Date().getTime() / 1000) + data.body['expires_in'];
-                    console.log('Refreshed token. It now expires in ' + Math.floor(tokenData.spotifyTokenExpirationEpoch - new Date().getTime() / 1000) + ' seconds!');
-                    tokenData.access_token = data.body['access_token']
+                console.log('Token expired. Requesting new one.')
+                //request updated token.
+                socket.emit('token_expired', 'holder', function(data){
+                    tokenData = data
+                    console.log(tokenData)
                     spotifyApi.setAccessToken(tokenData.access_token);
-                    db.update({_id: 'tokenData'}, tokenData, {}, function(){
-                    })
-                    io.emit('updateTokenData', tokenData)
                     fulfill(true);
-                }, function(err) {
-                    console.log('Could not refresh the token!', err.message);
-                    fulfill(false);
-                });
+                    return(true)
+                })
             } else {
-                fulfill(false);
+                fulfill(true);
             }
         })
     }
     socket.on('updateTokenData', function(data){
         console.dir(data)
         tokenData = data
-        player.connect().then(success => {
-          if (success) {
-            console.log('The Web Playback SDK successfully connected to Spotify!');
-          }
-        })
+        spotifyApi.setAccessToken(tokenData.access_token)
       
-      })
+    })
 
 
     $('form').submit(function(){
@@ -256,9 +254,9 @@ $(function () {
             $("#recent-track-list").append(li);
         }
     })
-    socket.on('artistSrchResp',function(data){
+    function artistSrchResp(data){
         var i;
-        var artists = data.body.artists.items;
+        var artists = data.artists.items;
 
         $("#artist-holder-inner").empty();
 
@@ -280,9 +278,9 @@ $(function () {
             div.html(getArtistDiv(artists[k]));
             $("#artist-holder-inner").append(div);
         }
-    });
-    socket.on('trackSrchResp',function(data){
-        var tracks = data.body.tracks.items;
+    }
+    function trackSrchResp(data){
+        var tracks = data.tracks.items;
 
         $("#track-list").empty();
 
@@ -299,10 +297,10 @@ $(function () {
             li.html(getTrackDiv(tracks[i], i));
             $("#track-list").append(li);
         }
-    });
-    socket.on('albumSrchResp',function(data){
+    }
+    function albumSrchResp(data){
         var i;
-        var albums = data.body.albums.items;
+        var albums = data.albums.items;
 
         $("#album-holder-inner").empty();
 
@@ -325,7 +323,7 @@ $(function () {
             div.html(getAlbumDiv(albums[k]));
             $("#album-holder-inner").append(div);
         }
-    });
+    }
     socket.on('previewData', function(trackData){
         var a = new Audio(trackData.body.tracks[0].preview_url);
         a.play();
