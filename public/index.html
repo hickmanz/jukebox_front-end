@@ -37,9 +37,14 @@
 </head>
 <body>
 <div class="main">
+    <div class="err-msg-holder">
+        <div class="err-msg-server err-msg" style="display: none">
+            Not Connected To Server
+        </div>
+    </div>
     <div class="menu-holder">
         <div class="logo-holder">
-            <i class="icon-spotify"></i> ZAQIFY
+            <i class="icon-spotify-lines"></i> ZAQIFY
         </div>    
         <div class="menu-main-holder">
             <ul>
@@ -96,10 +101,14 @@
         <div class="content-holder-inner">
             <div class="menu-expand-holder">
                 <div id="search-outter">
+                    <div class="search-header">
+                            <div class="search-bar">
+                                <input type="text" id="query" value="" class="form-control" placeholder="Search"/> 
+                            </div>
+                            <i class="icon-chevron-left search-back" style="display: none"></i>
+                    </div>
                     <div class="search-content-holder">
-                        <div class="search-bar">
-                            <input type="text" id="query" value="" class="form-control" placeholder="Search"/> 
-                        </div>
+
                         <div class="track-holder-row">
                             <h1> Songs </h1>
                             <ul id="track-list">
@@ -115,7 +124,14 @@
                             <div id="album-holder-inner">
                             </div>
                         </div>
-
+                        <div class="playlist-srch-holder-row">
+                                <h1> Playlists </h1>
+                                <div id="playlist-srch-holder-inner">
+                                </div>
+                            </div>
+                    </div>
+                    <div class="search-overlay-holder">
+                        
                     </div>
                 </div>
                 <div id="recent-outter">
@@ -127,6 +143,7 @@
                         </div>    
                     </div>
                 </div>
+                
             </div>
             <div class="current-song-holder">
                 <div class="current-song-background">
@@ -138,7 +155,7 @@
                             <div class="song-name">
                                 Add Some Music
                             </div>
-                            <div class="song-artist">
+                            <div class="song-artist artist">
                                  Please
                             </div>
                         </div>

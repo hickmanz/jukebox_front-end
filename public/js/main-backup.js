@@ -4,7 +4,6 @@ var windowState
 var currentResults = {};
 var recentList 
 var playerTimer
-var tokenData;
 var player = {
     volume: .5,
     currentPlaying: null,
@@ -13,12 +12,10 @@ var player = {
     playback: null
 }
 
-var spotifyApi = new SpotifyWebApi();
-
 $(function () {
 
     var socket = io('http://api.zaqify.com:8080/');
-    //var socket = io('http://localhost:8080/');
+   //var socket = io('http://localhost:8080/');
 
     var searchBox = document.getElementById('query')
     var searchTimeout = null;
@@ -67,21 +64,6 @@ $(function () {
         $(".icon-pause").show();
         $(".icon-play").hide();
     })
-    $(".shuffle-playlist").click(function(){
-        console.log('sending shuffle command')
-        showtoast('Shuffling Playlist!')
-        socket.emit('shuffle-playlist')
-    })
-    $(".restart-player").click(function(){
-        showtoast('Restarting player :(')
-        socket.emit('restart-player')
-    })
-    $(".nuke-playlist").click(function(){
-        showtoast('NUKING IT')
-        var req = {};
-        req.type = "nukeIt";
-        socket.emit('editQueue', req);
-    })
     searchBox.onkeyup = function (e) {
         // Clear the timeout if it has already been set.
         // This will prevent the previous task from executing
@@ -90,65 +72,9 @@ $(function () {
     
         // Make a new timeout set to go off in 800ms
         searchTimeout = setTimeout(function () {
-            searchSpotify(searchBox.value) //socket.emit('search', searchBox.value);
+            socket.emit('search', searchBox.value);
         }, 800);
     };
-    //on expired token send to server and wait for update
-    //set token when you get it
-    function searchSpotify(data){
-        console.log('search term: ' + data);
-
-        checkToken().then(function(resp){
-            spotifyApi.searchArtists(data)
-                .then(function(response) {
-                    //print it
-                    console.dir(response)
-                    artistSrchResp(response);
-                }, function(err) {
-                    console.error(err);
-                });
-            spotifyApi.searchAlbums(data)
-                .then(function(response2) {
-                    //print it
-                    albumSrchResp(response2);
-                }, function(err) {
-                    console.error(err);
-                });
-            spotifyApi.searchTracks(data, {limit: 50})
-                .then(function(response3) {
-                    trackSrchResp(response3)
-                }, function(err) {
-                    console.error(err);
-                });  
-        })
-    }
-
-    function checkToken(){
-        return new Promise(function (fulfill, reject){
-            var timeToExp = Math.floor(tokenData.spotifyTokenExpirationEpoch - new Date().getTime() / 1000)
-            console.log("Token expires in:", timeToExp)
-            if ( timeToExp < 500){
-                console.log('Token expired. Requesting new one.')
-                //request updated token.
-                socket.emit('token_expired', 'holder', function(data){
-                    tokenData = data
-                    console.log(tokenData)
-                    spotifyApi.setAccessToken(tokenData.access_token);
-                    fulfill(true);
-                    return(true)
-                })
-            } else {
-                fulfill(true);
-            }
-        })
-    }
-    socket.on('updateTokenData', function(data){
-        console.dir(data)
-        tokenData = data
-        spotifyApi.setAccessToken(tokenData.access_token)
-      
-    })
-
 
     $('form').submit(function(){
       socket.emit('search', searchBox.val());
@@ -188,7 +114,11 @@ $(function () {
         req.data = $(this).parent().data('guid');
         console.log(req.data)
         socket.emit('editQueue', req);
-        showtoast('Song Removed')
+    });
+    $('#nuke-it').on('click',  function(e) {
+        var req = {};
+        req.type = "NukeIt";
+        socket.emit('editQueue', req);
     });
     socket.on('test',function(data){
         console.dir(data);
@@ -254,9 +184,9 @@ $(function () {
             $("#recent-track-list").append(li);
         }
     })
-    function artistSrchResp(data){
+    socket.on('artistSrchResp',function(data){
         var i;
-        var artists = data.artists.items;
+        var artists = data.body.artists.items;
 
         $("#artist-holder-inner").empty();
 
@@ -278,9 +208,9 @@ $(function () {
             div.html(getArtistDiv(artists[k]));
             $("#artist-holder-inner").append(div);
         }
-    }
-    function trackSrchResp(data){
-        var tracks = data.tracks.items;
+    });
+    socket.on('trackSrchResp',function(data){
+        var tracks = data.body.tracks.items;
 
         $("#track-list").empty();
 
@@ -297,10 +227,10 @@ $(function () {
             li.html(getTrackDiv(tracks[i], i));
             $("#track-list").append(li);
         }
-    }
-    function albumSrchResp(data){
+    });
+    socket.on('albumSrchResp',function(data){
         var i;
-        var albums = data.albums.items;
+        var albums = data.body.albums.items;
 
         $("#album-holder-inner").empty();
 
@@ -323,7 +253,7 @@ $(function () {
             div.html(getAlbumDiv(albums[k]));
             $("#album-holder-inner").append(div);
         }
-    }
+    });
     socket.on('previewData', function(trackData){
         var a = new Audio(trackData.body.tracks[0].preview_url);
         a.play();
@@ -353,21 +283,6 @@ $(function () {
     $('.current-song-content').click(function () { // When arrow is clicked
         if(playlistShown == false){
             showPlaylist();
-        } else {
-            //if not control-status class
-            showSearch()
-        }
-    }).find('.control-status').click(function(e) {
-        if(playlistShown == false){
-            showPlaylist();
-        } else {
-            e.stopPropagation();
-        }
-    });
- 
-    $('.logo-holder').click(function () { // When arrow is clicked
-        if(playlistShown == false){
-            showPlaylist();
         }
     });
     $( "#sortable" ).sortable({
@@ -391,6 +306,7 @@ $(function () {
         }
     });
     $( "#sortable" ).disableSelection();
+
 
 function configUserSettings(){
     //playlist image size settings

@@ -1,6 +1,7 @@
 var playlistShown = true;
 var optionsShown = false;
 var windowState
+var searchState = []
 var currentResults = {};
 var recentList 
 var playerTimer
@@ -13,9 +14,17 @@ var player = {
     playback: null
 }
 
+var spotifyApi = new SpotifyWebApi();
+
 $(function () {
 
     var socket = io('http://api.zaqify.com:8080/');
+    socket.on("connect_error", function(data){
+        $(".err-msg-server").show();
+    })
+    socket.on("connect", function(data){
+        $(".err-msg-server").hide();
+    })
     //var socket = io('http://localhost:8080/');
 
     var searchBox = document.getElementById('query')
@@ -38,6 +47,7 @@ $(function () {
     $("#recent-outter").hide();
     $(".track-holder-row").hide();
     $(".album-holder-row").hide();
+    $(".playlist-srch-holder-row").hide();
     $(".icon-pause").hide();
 
     $('.statusBar-holder').click(function(e) {
@@ -88,9 +98,74 @@ $(function () {
     
         // Make a new timeout set to go off in 800ms
         searchTimeout = setTimeout(function () {
-            socket.emit('search', searchBox.value);
+            searchSpotify(searchBox.value) //socket.emit('search', searchBox.value);
         }, 800);
     };
+    //on expired token send to server and wait for update
+    //set token when you get it
+    function searchSpotify(data){
+        changeSearchPage('destroy')
+        console.log('search term: ' + data);
+
+        checkToken().then(function(resp){
+            spotifyApi.searchArtists(data)
+                .then(function(response) {
+                    //print it
+                    artistSrchResp(response);
+                }, function(err) {
+                    console.error(err);
+                });
+            spotifyApi.searchAlbums(data)
+                .then(function(response2) {
+                    //print it
+                    albumSrchResp(response2);
+                }, function(err) {
+                    console.error(err);
+                });
+            spotifyApi.searchTracks(data, {limit: 50})
+                .then(function(response3) {
+                    trackSrchResp(response3)
+                }, function(err) {
+                    console.error(err);
+                }); 
+            spotifyApi.searchPlaylists(data)
+                .then(function(response4) {
+                    console.dir(response4)
+
+                    playlistSrchResp(response4)
+                }, function(err) {
+                    console.error(err);
+                });  
+        })
+    }
+
+    function checkToken(){
+        return new Promise(function (fulfill, reject){
+            var timeToExp = Math.floor(tokenData.spotifyTokenExpirationEpoch - new Date().getTime() / 1000)
+            console.log("Token expires in:", timeToExp)
+            if ( timeToExp < 500){
+                console.log('Token expired. Requesting new one.')
+                //request updated token.
+                socket.emit('token_expired', 'holder', function(data){
+                    tokenData = data
+                    console.log(tokenData)
+                    spotifyApi.setAccessToken(tokenData.access_token);
+                    fulfill(true);
+                    return(true)
+                })
+            } else {
+                fulfill(true);
+            }
+        })
+    }
+    socket.on('updateTokenData', function(data){
+        console.dir(data)
+        tokenData = data
+        spotifyApi.setAccessToken(tokenData.access_token)
+      
+    })
+
+
     $('form').submit(function(){
       socket.emit('search', searchBox.val());
       searchBox.blur();
@@ -104,6 +179,289 @@ $(function () {
         req.data = currentResults.tracks[this.getAttribute('data-index')];
         socket.emit('editQueue', req);
     });
+
+    $('.search-content-holder').on('click', 'li.see-more', function() {
+
+        $( "#track-list li:nth-of-type(1n+12)" ).css("display", "flex");
+        $( "#track-list li:last-child" ).css("display", "none");
+    })
+
+    $('.main').on('click', 'div.artist', function() {
+        var id = this.getAttribute('data-id')
+        var pageData={
+            elid: getUID(),
+            type: 'artist',
+            id: id,
+            markup: "",
+            data: {}
+        }
+
+        checkToken().then(function(resp){
+            spotifyApi.getArtist(pageData.id)
+                .then(function(response) {
+                    //print it
+                    console.dir(response)
+                    pageData.data = response
+                    pageData.markup = getArtistSubPg(pageData)
+                    changeSearchPage('artist', pageData)    
+                }, function(err) {
+                    console.error(err);
+                });
+        })
+
+    });
+    $('.main').on('click', 'div.playlist', function() {
+        var id = this.getAttribute('data-id')
+        var i = this.getAttribute('data-index')
+        var pageData={
+            elid: getUID(),
+            type: 'playlist',
+            id: id,
+            markup: "",
+            data: {},
+            playlist: {}
+        }
+        
+        pageData.playlist = currentResults.playlists[i]
+
+        checkToken().then(function(resp){
+            spotifyApi.getPlaylistTracks(pageData.id)
+                .then(function(response) {
+                    //print it
+                    pageData.data = response
+                    var newItems = []
+                    response.items.forEach(element => {
+                        newItems.push(element.track)
+                    });
+                    pageData.data.items = newItems
+                    //take response and trim it
+
+                    console.dir(pageData)
+
+                    pageData.markup = getPlaylistSubPg(pageData)
+                    changeSearchPage('playlist', pageData)    
+                    
+
+                }, function(err) {
+                    console.error(err);
+                });
+        })
+
+    })
+    $('.main').on('click', 'div.album', function() {
+        var id = this.getAttribute('data-id')
+        var type = this.getAttribute('data-type')
+        var i = this.getAttribute('data-index')
+
+        var pageData={
+            elid: getUID(),
+            type: 'album',
+            id: id,
+            markup: "",
+            data: {}
+        }
+       
+        checkToken().then(function(resp){
+            spotifyApi.getAlbumTracks(pageData.id)
+                .then(function(response) {
+                    //print it
+                    pageData.data = response
+                    if(type =="slow"){
+                        spotifyApi.getAlbum(pageData.id)
+                        .then(function(response2) {
+                            for (var k=0; k < pageData.data.items.length; k++) {
+                                pageData.data.items[k].album = response2
+                            }
+                            pageData.markup = getAlbumSubPg(pageData)
+                            changeSearchPage('album', pageData)  
+                        }, function(err) {
+                            console.error(err);
+                        });  
+                    } else {
+                        for (var k=0; k < pageData.data.items.length; k++) {
+                            pageData.data.items[k].album =  currentResults.albums[i]
+                        }
+                        pageData.markup = getAlbumSubPg(pageData)
+                        changeSearchPage('album', pageData)    
+                    }
+
+                }, function(err) {
+                    console.error(err);
+                });
+        })
+
+    });
+    function getAlbumSubPg(pageData){
+        console.dir(pageData.data)
+        var markup =`
+            <div id="${pageData.elid}" class="album-sub">
+                <h1>
+                    ${pageData.data.items[0].album.name}
+                </h1>
+                <div data-id="${pageData.elid}" class="button-filled add-album">
+                    Add Album
+                </div>
+                <div>
+                <ul>
+                <li class="track-row top-row">
+                    <div class="add"></div>
+                    <div class="preview"></div>
+                    <div class="title">TITLE</div>
+                    <div class="artist">ARTIST</div>
+                    <div class="album">ALBUM</div>
+                    <div class="duration"><i class="icon-clock"></i></div>
+                    <div class="popularity"><i class="icon-heart"></i></div>
+                </li>
+                ${pageData.data.items.map(track=>`<li class="track-row">
+                        <div class="add"><i class="icon-plus" data-type="track" data-index=''></i></div>
+                        <div class="preview"><i class="icon-headphones" data-type="track" data-trackid='${track.id}'></i></div>
+                        <div class="title">${track.name}</div><div class="artist" data-type="slow" data-id=${track.artists[0].id}></div>
+                        <div class="album" data-type="slow" data-id=${track.album.id}>${track.album.name}</div>
+                        <div class="duration"></div>
+                        <div class="popularity"> ${track.popularity}</div>
+                    </li>`)}
+            </ul>
+                </div>
+
+            </div>
+        `
+        return markup
+    }
+    function getPlaylistSubPg(pageData){
+
+        var markup =`
+            <div id="${pageData.elid}" class="playlist-sub">
+                <h1>
+                    ${pageData.playlist.name}
+                </h1>
+                <div data-id="${pageData.elid}" class="button-filled add-playlist">
+                    Add Playlist
+                </div>
+                <ul>
+                    <li class="track-row top-row">
+                        <div class="add"></div>
+                        <div class="preview"></div>
+                        <div class="title">TITLE</div>
+                        <div class="artist">ARTIST</div>
+                        <div class="album">ALBUM</div>
+                        <div class="duration"><i class="icon-clock"></i></div>
+                        <div class="popularity"><i class="icon-heart"></i></div>
+                    </li>
+                    ${pageData.data.items.map(track=>`<li class="track-row">
+                            <div class="add"><i class="icon-plus" data-type="track" data-index=''></i></div>
+                            <div class="preview"><i class="icon-headphones" data-type="track" data-trackid='${track.id}'></i></div>
+                            <div class="title">${track.name}</div><div class="artist" data-type="slow" data-id=${track.artists[0].id}></div>
+                            <div class="album" data-type="slow" data-id=${track.album.id}>${track.album.name}</div>
+                            <div class="duration"></div>
+                            <div class="popularity"> ${track.popularity}</div>
+                        </li>`)}
+                </ul>
+
+            </div>
+        `
+        return markup
+    }
+    $('.main').on('click', 'div.add-album', function() {
+        var id = this.getAttribute('data-id')
+        var index = searchState.map(function(x) {return x.elid; }).indexOf(id);
+   
+        console.log(index)
+        var data = searchState[index]
+        console.dir(searchState)
+        var req = {};
+        req.type = "addSong";
+        showtoast('Album Added!')
+        req.data = data.data.items;
+        socket.emit('editQueue', req);
+
+    })
+    $('.main').on('click', 'div.add-playlist', function() {
+        var id = this.getAttribute('data-id')
+        var index = searchState.map(function(x) {return x.elid; }).indexOf(id);
+
+        var data = searchState[index]
+        var req = {};
+        req.type = "addSong";
+        showtoast('Playlist Added!')
+        req.data = data.data.items;
+        socket.emit('editQueue', req);
+
+    })
+    $('.main').on('click', 'div.add-album-quick', function() {
+        var id = this.getAttribute('data-id')
+    })
+
+    function getArtistSubPg(pageData){
+        var markup =`
+            <div id="${pageData.elid}" class="artist-sub">
+                <div>
+                    ${pageData.data.name}
+                </div>
+                <div>
+                    Add Artist
+                </div>
+                <div>
+                    --More coming--
+                </div>
+
+            </div>
+        `
+        return markup
+    }
+    $('.main').on('click', 'i.search-back', function() {
+        console.log('back a page')
+        changeSearchPage('back')
+    })
+
+    function changeSearchPage(type, pageData){
+        if(type=="artist"){
+            searchState.push(pageData)
+            $(".search-content-holder").hide();
+            $(".search-back").show();
+            $('.search-overlay-holder').append(pageData.markup)
+
+            //show page
+        } else if(type=="album"){
+            searchState.push(pageData)
+            $(".search-content-holder").hide();
+            $(".search-back").show();
+            $('.search-overlay-holder').append(pageData.markup)
+        }else if(type=="playlist"){
+            searchState.push(pageData)
+            $(".search-content-holder").hide();
+            $(".search-back").show();
+            $('.search-overlay-holder').append(pageData.markup)
+        }else if (type="back"){
+            
+            if(searchState.length > 0){
+                var rmPage = searchState.pop()
+                document.getElementById(rmPage.elid).remove();
+                if(searchState.length > 0){
+                    //show searchState[searchState.length-1].elid
+                }else {
+                    //show main search page
+                    $(".search-content-holder").show();
+                    $(".search-back").hide();
+                }
+            }
+            //go to prev
+            //if prev is nothing then show search results again
+        } else if (type=="destroy"){
+            //remove all elements and delete them
+            $(".search-content-holder").show();
+            $(".search-back").hide();
+            searchState.forEach(element => {
+                document.getElementById(element.elid).remove();
+            });
+
+        }
+        
+        $('#search-outter').scrollTop(0);
+
+    
+
+        //do stuff
+    }
     $('#track-list').on('click', 'div.preview i', function(e) {
         var req = {};
         req.type = "previewSong";
@@ -130,11 +488,6 @@ $(function () {
         console.log(req.data)
         socket.emit('editQueue', req);
         showtoast('Song Removed')
-    });
-    $('#nuke-it').on('click',  function(e) {
-        var req = {};
-        req.type = "NukeIt";
-        socket.emit('editQueue', req);
     });
     socket.on('test',function(data){
         console.dir(data);
@@ -186,23 +539,43 @@ $(function () {
         var tracks = data.body.items;
         recentList = tracks
 
+        var markup = `
+        <li class="track-row top-row">
+            <div class="add"></div>
+            <div class="preview"></div>
+            <div class="title">TITLE</div>
+            <div class="artist">ARTIST</div>
+            <div class="album">ALBUM</div>
+            <div class="duration"><i class="icon-clock"></i></div>
+            <div class="popularity"><i class="icon-heart"></i></div>
+        </li>
+        `
+        var endrow = `
+        <li class="track-row last-row see-more">
+            SEE MORE
+        </li>
+        `
+
+
         $("#recent-track-list").empty();
 
         $(".track-holder-row").show();
 
         var div = $("<li />");
-        div.html('<li class="track-row top-row"><div class="add"></div><div class="preview"></div><div class="title">TITLE</div><div class="artist">ARTIST</div><div class="album">ALBUM</div><div class="duration"><i class="icon-clock"></i></div><div class="popularity"><i class="icon-heart"></i></div></li>');
+        div.html(markup);
         $("#recent-track-list").append(div);
         console.dir(tracks)
         for (var i=0; i < tracks.length; i++) {
-            var li = $("<li />");
-            li.html(getTrackDiv(tracks[i].track, i));
-            $("#recent-track-list").append(li);
+            $("#recent-track-list").append(getTrackDiv(tracks[i].track, i));
         }
+
+        $("#recent-track-list").append(endrow);
     })
-    socket.on('artistSrchResp',function(data){
+
+
+    function artistSrchResp(data){
         var i;
-        var artists = data.body.artists.items;
+        var artists = data.artists.items;
 
         $("#artist-holder-inner").empty();
 
@@ -215,7 +588,7 @@ $(function () {
         }
 
         if (i > 0){
-            $(".artist-holder-row").show();
+            //$(".artist-holder-row").show();
         } else {
             $(".artist-holder-row").hide();
         }
@@ -224,29 +597,47 @@ $(function () {
             div.html(getArtistDiv(artists[k]));
             $("#artist-holder-inner").append(div);
         }
-    });
-    socket.on('trackSrchResp',function(data){
-        var tracks = data.body.tracks.items;
+    }
+    function trackSrchResp(data){
+        var tracks = data.tracks.items;
 
         $("#track-list").empty();
 
         currentResults.tracks = tracks;
 
         $(".track-holder-row").show();
+        var markup =`
+        <li class="track-row top-row">
+            <div class="add"></div>
+            <div class="preview"></div>
+            <div class="title">TITLE</div>
+            <div class="artist">ARTIST</div>
+            <div class="album">ALBUM</div>
+            <div class="duration"><i class="icon-clock"></i></div>
+            <div class="popularity"><i class="icon-heart"></i></div>
+        </li>
+        `
+        var endrow = `
+        <li class="track-row last-row see-more">
+            SEE MORE
+        </li>
+        `
 
-        var div = $("<li />");
-        div.html('<li class="track-row top-row"><div class="add"></div><div class="preview"></div><div class="title">TITLE</div><div class="artist">ARTIST</div><div class="album">ALBUM</div><div class="duration"><i class="icon-clock"></i></div><div class="popularity"><i class="icon-heart"></i></div></li>');
-        $("#track-list").append(div);
+
+        $("#track-list").append(markup);
 
         for (var i=0; i < tracks.length; i++) {
-            var li = $("<li />");
-            li.html(getTrackDiv(tracks[i], i));
-            $("#track-list").append(li);
+
+            $("#track-list").append(getTrackDiv(tracks[i], i));
         }
-    });
-    socket.on('albumSrchResp',function(data){
+
+        $("#track-list").append(endrow);
+
+
+    }
+    function albumSrchResp(data){
         var i;
-        var albums = data.body.albums.items;
+        var albums = data.albums.items;
 
         $("#album-holder-inner").empty();
 
@@ -266,10 +657,37 @@ $(function () {
 
         for (var k=0; k < i; k++) {
             var div = $("<div />");
-            div.html(getAlbumDiv(albums[k]));
+            div.html(getAlbumDiv(albums[k], k));
             $("#album-holder-inner").append(div);
         }
-    });
+    }
+    function playlistSrchResp(data){
+        var i;
+        var playlists = data.playlists.items;
+
+        $("#playlist-srch-holder-inner").empty();
+
+        currentResults.playlists = playlists;
+
+        if(playlists.length < 5){
+            i = playlists.length;
+        } else {
+            i = 9;
+        }
+
+        if (i > 0){
+            $(".playlist-srch-holder-row").show();
+        } else {
+            $(".playlist-srch-holder-row").hide();
+        }
+
+        
+        for (var k=0; k < i; k++) {
+            var div = $("<div />");
+            div.html(getPlaylistSrchDiv(playlists[k], k));
+            $("#playlist-srch-holder-inner").append(div);
+        }
+    }
     socket.on('previewData', function(trackData){
         var a = new Audio(trackData.body.tracks[0].preview_url);
         a.play();
@@ -364,8 +782,8 @@ function updatePlayer(){
     } else {
         var imageUrl
         var artists = "";
-        if (player.currentPlaying.album.images.length < 0){
-            imageUrl = "";
+        if (player.currentPlaying.album.images.length < 1){
+            imageUrl ='./images/no-album.jpg';
         } else {
             imageUrl = player.currentPlaying.album.images[0].url;
         }
@@ -451,17 +869,26 @@ function showPlaylist() {
     playlistShown = true;
 }
 
-function getArtistDiv(data){
-    var i = data.images.length - 2;
+function getArtistDiv(data, index){
+    var i = data.images.length - 1;
     var imageUrl
+
     if (i < 0){
         imageUrl = "";
     } else {
         imageUrl = data.images[i].url;
     }
-    return `<div class="artist-holder"><div class="picture" style="background-image: url('` + imageUrl + `')"></div>` + data.name + `</div>`;
+
+    var markup = `
+    <div class="artist-holder artist" data-id="${data.id}">
+        <div class="picture" style="background-image: url('${imageUrl}')"></div>
+        ${data.name}
+    </div>
+    `
+
+    return markup;
 }
-function getAlbumDiv(data){
+function getAlbumDiv(data, index){
     var i = data.images.length - 2;
     var imageUrl
     var artists = "";
@@ -477,7 +904,35 @@ function getAlbumDiv(data){
             artists += data.artists[i].name
         }
     }
-    return `<div class="album-holder"><div class="picture" style="background-image: url('` + imageUrl + `')"></div><div class="album">` + data.name + `</div><div class="artist">` + artists + `</div></div>`;
+    var markup =`
+    <div class="album-holder album" data-index=${index} data-id="${data.id}">
+        <div class="picture" style="background-image: url('${imageUrl}')">
+        </div>
+        <div class="album">${data.name}</div>
+        <div class="artist">${artists}</div>
+    </div>
+    `
+    return markup
+}
+function getPlaylistSrchDiv(data, index){
+    var i = data.images.length - 1;
+    var imageUrl
+    var artists = "";
+    if (i < 0){
+        imageUrl = "";
+    } else {
+        imageUrl = data.images[i].url;
+    }
+
+    var markup =`
+    <div class="playlist-srch-holder playlist" data-index=${index} data-id="${data.id}">
+        <div class="picture" style="background-image: url('${imageUrl}')">
+        </div>
+        <div class="album">${data.name}</div>
+
+    </div>
+    `
+    return markup
 }
 function getTrackDiv(data, index){
     var artists = "";
@@ -493,14 +948,24 @@ function getTrackDiv(data, index){
     var sec = Math.floor((data.duration_ms/1000) % 60);
     var duration = min + ':' + sec;
 
+    var markup = `
+    <li class="track-row">
+        <div class="add"><i class="icon-plus" data-type="track" data-index='${index}'></i></div>
+        <div class="preview"><i class="icon-headphones" data-type="track" data-trackid='${data.id}'></i></div>
+        <div class="title">${data.name}</div><div class="artist" data-type="slow" data-id=${data.artists[0].id}>${artists}</div>
+        <div class="album" data-type="slow" data-id=${data.album.id}>${data.album.name}</div>
+        <div class="duration">${duration}</div>
+        <div class="popularity"> ${data.popularity}</div>
+    </li>
+    `;
 
-    return '<li class="track-row"><div class="add"><i class="icon-plus" data-type="track" data-index=' + index + '></i></div><div class="preview"><i class="icon-headphones" data-type="track" data-trackid=' + data.id + '></i></div><div class="title">' + data.name + '</div><div class="artist">' + artists + '</div><div class="album">' + data.album.name + '</div><div class="duration">' + duration + '</div><div class="popularity">' + data.popularity + '</div></li>';
+    return markup;
 }
 function getPlaylistDiv(data){
     var imageUrl
     var artists = "";
-    if (data.album.images.length < 0){
-        imageUrl = "";
+    if (data.album.images.length < 1){
+        imageUrl = './images/no-album.jpg'
     } else {
         imageUrl = data.album.images[0].url;
     }
@@ -528,6 +993,11 @@ function getPlaylistDiv(data){
                 </div>`;
 }
 
+function getUID(){
+    return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+        (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+      )
+}
 
 function ToastBuilder(options) {
     // options are optional
