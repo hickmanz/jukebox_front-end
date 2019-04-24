@@ -273,8 +273,8 @@ html{
     min-height: 0px;
 }
 .current-song-background{
-    width: 110%;
-    height: 110%;
+    width: 118%;
+    height: 118%;
     background-image: url('../images/robot.png');
     background-size: 110%;
     background-position: center;
@@ -283,7 +283,7 @@ html{
     z-index: 1;
     position: absolute;
     left: -20px;
-    top: -20px;
+    top: -10px;
 }
 .current-song-content{
     background: rgba(45, 45, 45, 0.45);

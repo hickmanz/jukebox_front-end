@@ -18,7 +18,7 @@ var spotifyApi = new SpotifyWebApi();
 
 $(function () {
 
-    var socket = io('http://api.zaqify.com:8080/');
+    var socket = io('http://api.zaqify.com:8080/', {secure: false, rejectUnauthorized: false});
     socket.on("connect_error", function(data){
         $(".err-msg-server").show();
     })
